@@ -295,3 +295,17 @@ class Agent:
 
     def call_extension(self, name: str, **kwargs) -> Any:
         pass
+    def decompose_objective(self, objective):
+        decomposer = ObjectiveDecomposer(self)
+        return decomposer.execute(objective)
+
+    def create_tool(self, description):
+        creator = ToolCreator(self)
+        return creator.execute(description)
+
+    def adjust_tasks(self, tasks, alignment_issues):
+        adjuster = TaskAdjuster(self)
+        return adjuster.execute(tasks, alignment_issues)
+    def execute_task(self, task):
+        # Logic to execute a task using existing tools or newly created ones
+        pass

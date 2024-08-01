@@ -1,0 +1,164 @@
+File: requirements.txt
+--- merged_relevant_files.txt/requirements.txt
++++ current/requirements.txt
+@@ -1,5 +1,3 @@
+-#==============================================================================
+-
+ ansio==0.0.1
+ python-dotenv==1.0.1
+ langchain-groq==0.1.6
+@@ -14,4 +12,4 @@
+ docker==7.1.0
+ paramiko==3.4.0
+ duckduckgo_search==6.1.12
+-inputimeout==1.0.4
++inputimeout==1.0.4
+
+File: models.py
+--- merged_relevant_files.txt/models.py
++++ current/models.py
+@@ -1,5 +1,3 @@
+-#==============================================================================
+-
+ import os
+ from dotenv import load_dotenv
+ from langchain_community.llms import Ollama
+@@ -100,4 +98,3 @@
+ def get_embedding_openai(api_key=None):
+     api_key = api_key or get_api_key("openai")
+     return OpenAIEmbeddings(api_key=api_key) #type: ignore
+-
+
+File: README.md
+--- merged_relevant_files.txt/README.md
++++ current/README.md
+@@ -1,5 +1,3 @@
+-#==============================================================================
+-
+ # Agent Zero
+ 
+ [![Join our Discord](https://img.shields.io/badge/Discord-Join%20our%20server-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/B8KZKNsPpj) [![Subscribe on YouTube](https://img.shields.io/badge/YouTube-Subscribe-red?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/@AgentZeroFW) [![Connect on LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/jan-tomasek/) [![Follow on X.com](https://img.shields.io/badge/X.com-Follow-1DA1F2?style=for-the-badge&logo=x&logoColor=white)](https://x.com/JanTomasekDev)
+@@ -107,4 +105,3 @@
+ python main.py
+ ~~~
+ - Or run it in debug mode in VS Code using the **debug** button in the top right corner of the editor. I have provided config files for VS Code for this purpose.
+-
+
+File: .gitignore
+--- merged_relevant_files.txt/.gitignore
++++ current/.gitignore
+@@ -1,5 +1,3 @@
+-#==============================================================================
+-
+ **/.DS_Store
+ **/.env
+ **/__pycache__/
+@@ -19,4 +17,4 @@
+ # Ignore all contents of the directory "logs"
+ logs/*
+ # But do not ignore the directory itself
+-!logs/.gitkeep
++!logs/.gitkeep
+
+File: recent_changes.txt
+--- merged_relevant_files.txt/recent_changes.txt
++++ current/recent_changes.txt
+@@ -1,5 +1,3 @@
+-#==============================================================================
+-
+ File: requirements.txt
+ --- merged_relevant_files.txt/requirements.txt
+ +++ current/requirements.txt
+@@ -287,4 +285,3 @@
+ -    print(f"Recent changes have been written to {output_file}")
+ +    main()
+ 
+-
+
+File: agent.py
+--- merged_relevant_files.txt/agent.py
++++ current/agent.py
+@@ -1,5 +1,3 @@
+-#==============================================================================
+-
+ from dataclasses import dataclass, field
+ import time, importlib, inspect, os, json
+ from typing import Any, Optional, Dict
+@@ -310,4 +308,4 @@
+         return adjuster.execute(tasks, alignment_issues)
+     def execute_task(self, task):
+         # Logic to execute a task using existing tools or newly created ones
+-        pass
++        pass
+
+File: merge_files.py
+--- merged_relevant_files.txt/merge_files.py
++++ current/merge_files.py
+@@ -1,5 +1,3 @@
+-#==============================================================================
+-
+ import os
+ 
+ def is_relevant_file(file_path):
+@@ -43,4 +41,4 @@
+ output_file = 'merged_relevant_files.txt'
+ 
+ merge_files(directory, output_file)
+-print(f"Relevant files have been merged into {output_file}")
++print(f"Relevant files have been merged into {output_file}")
+
+File: main.py
+--- merged_relevant_files.txt/main.py
++++ current/main.py
+@@ -1,5 +1,3 @@
+-#==============================================================================
+-
+ import threading, time, models, os, json
+ from ansio import application_keypad, mouse_input, raw_input
+ from ansio.input import InputEvent, get_input_event
+@@ -12,7 +10,7 @@
+ from python.tools.AlignmentChecker import AlignmentChecker
+ input_lock = threading.Lock()
+ os.chdir(files.get_abs_path("./work_dir")) #change CWD to work_dir
+-import numpy
++
+ 
+ def load_objectives():
+     objectives_path = os.path.join("prompts", "objective.md")
+@@ -147,4 +145,4 @@
+     threading.Thread(target=capture_keys, daemon=True).start()
+ 
+     # Start the AGI development process
+-    initialize()
++    initialize()
+
+File: generate_diff.py
+--- merged_relevant_files.txt/generate_diff.py
++++ current/generate_diff.py
+@@ -1,5 +1,3 @@
+-#==============================================================================
+-
+ import os
+ import difflib
+ 
+@@ -93,4 +91,4 @@
+     print(f"Number of files with significant changes: {len(diffs)}")
+ 
+ if __name__ == "__main__":
+-    main()
++    main()
+
+File: prompts/tool.knowledge.response.md
+--- merged_relevant_files.txt/prompts/tool.knowledge.response.md
++++ current/prompts/tool.knowledge.response.md
+@@ -1,8 +1,6 @@
+-#==============================================================================
+-
+ ~~~json
+ {
+     "online_sources": "{{online_sources}}",
+     "memory": "{{memory}}",
+ }
+-~~~
++~~~
+
