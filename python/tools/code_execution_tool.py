@@ -3,14 +3,14 @@ import os, json, contextlib, subprocess, ast, shlex
 from io import StringIO
 import time
 from typing import Literal
-from python.helpers import files, messages
+from helpers import files, messages
 from agent import Agent
-from python.helpers.tool import Tool, Response
-from python.helpers import files
-from python.helpers.print_style import PrintStyle
-from python.helpers.shell_local import LocalInteractiveSession
-from python.helpers.shell_ssh import SSHInteractiveSession
-from python.helpers.docker import DockerContainerManager
+from helpers.tool import Tool, Response
+from helpers import files
+from helpers.print_style import PrintStyle
+from helpers.shell_local import LocalInteractiveSession
+from helpers.shell_ssh import SSHInteractiveSession
+from helpers.docker import DockerContainerManager
 
 @dataclass
 class State:

@@ -1,19 +1,22 @@
 from dataclasses import dataclass, field
 import time, importlib, inspect, os, json
-from typing import Any, Optional, Dict
-from python.helpers import extract_tools, rate_limiter, files, errors
-from python.helpers.print_style import PrintStyle
-from langchain.schema import AIMessage
+from typing import Any, Optional, Dict, List
+from helpers import extract_tools, rate_limiter, files, errors
+from helpers.print_style import PrintStyle
+from langchain.schema import AIMessage,  HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.embeddings import Embeddings
+from modules.knowledge_base import KnowledgeBase
+from modules.objective_handler import ObjectiveHandler
+from python.tools.task_adjuster import TaskAdjuster
 
 @dataclass
 class AgentConfig: 
-    chat_model:BaseChatModel
-    utility_model: BaseChatModel
-    embeddings_model:Embeddings
+    chat_model: Any
+    utility_model: Any
+    embeddings_model: Any
     memory_subdir: str = ""
     auto_memory_count: int = 3
     auto_memory_skip: int = 2
@@ -47,16 +50,18 @@ class Agent:
     def __init__(self, number:int, config: AgentConfig):
 
         # agent config  
-        self.config = config       
+        self.config = config
+        self.knowledge_base = KnowledgeBase()
+        self.objectives = ObjectiveHandler()       
 
         # non-config vars
         self.number = number
         self.agent_name = f"Agent {self.number}"
 
-        self.system_prompt = files.read_file("./prompts/agent.system.md").replace("{", "{{").replace("}", "}}")
-        self.tools_prompt = files.read_file("./prompts/agent.tools.md").replace("{", "{{").replace("}", "}}")
+        self.system_prompt = files.read_file("prompts/agent.system.md").replace("{", "{{").replace("}", "}}")
+        self.tools_prompt = files.read_file("prompts/agent.tools.md").replace("{", "{{").replace("}", "}}")
 
-        self.history = []
+        self.history: List[AIMessage | HumanMessage] = []
         self.last_message = ""
         self.intervention_message = ""
         self.intervention_status = False
@@ -139,16 +144,11 @@ class Agent:
     def set_data(self, field:str, value):
         self.data[field] = value
 
-    def append_message(self, msg: str, human: bool = False):
-        message_type = "human" if human else "ai"
-        if self.history and self.history[-1].type == message_type:
-            self.history[-1].content += "\n\n" + msg
+    def append_message(self, message: str, human: bool = False):
+        if human:
+            self.history.append(HumanMessage(content=message))
         else:
-            new_message = HumanMessage(content=msg) if human else AIMessage(content=msg)
-            self.history.append(new_message)
-            self.cleanup_history(self.config.msgs_keep_max, self.config.msgs_keep_start, self.config.msgs_keep_end)
-        if message_type=="ai":
-            self.last_message = msg
+            self.history.append(AIMessage(content=message))
 
     def concat_messages(self,messages):
         return "\n".join([f"{msg.type}: {msg.content}" for msg in messages])
@@ -220,15 +220,16 @@ class Agent:
 
         return self.history
 
-    def handle_intervention(self, progress:str="") -> bool:
-        while self.paused: time.sleep(0.1) # wait if paused
-        if self.intervention_message and not self.intervention_status: # if there is an intervention message, but not yet processed
-            if progress.strip(): self.append_message(progress) # append the response generated so far
-            user_msg = files.read_file("./prompts/fw.intervention.md", user_message=self.intervention_message) # format the user intervention template
-            self.append_message(user_msg,human=True) # append the intervention message
-            self.intervention_message = "" # reset the intervention message
+    def handle_intervention(self, progress: str = "") -> bool:
+        while self.paused: time.sleep(0.1)
+        if self.intervention_message and not self.intervention_status:
+            if progress.strip(): self.append_message(progress)
+            user_msg = files.read_file("./prompts/fw.intervention.md", user_message=self.intervention_message)
+            self.append_message(user_msg, human=True)
+            self.intervention_message = ""
             self.intervention_status = True
-        return self.intervention_status # return intervention status
+        return self.intervention_status
+        
 
     def process_tools(self, msg: str):
         # search for tool usage requests in agent message
@@ -259,7 +260,7 @@ class Agent:
 
     def get_tool(self, name: str, args: dict, message: str, **kwargs):
         from python.tools.unknown import Unknown 
-        from python.helpers.tool import Tool
+        from .helpers.tool import Tool
         
         tool_class = Unknown
         if files.exists("python/tools",f"{name}.py"): 
@@ -296,16 +297,28 @@ class Agent:
     def call_extension(self, name: str, **kwargs) -> Any:
         pass
     def decompose_objective(self, objective):
-        decomposer = ObjectiveDecomposer(self)
-        return decomposer.execute(objective)
+        from python.tools.objective_decomposer import ObjectiveDecomposer
+        decomposer = ObjectiveDecomposer(self, "objective_decomposer", {}, "")
+        return decomposer.execute(objectives=objective)
 
-    def create_tool(self, description):
-        creator = ToolCreator(self)
-        return creator.execute(description)
+    def create_tool(self, description: str) -> Any:
+        from python.tools.tool_creator import ToolCreator
+        creator = ToolCreator(
+            agent=self,
+            name="tool_creator",
+            args={"description": description},
+            message="Create a new tool"
+        )
+        return creator.execute()
 
     def adjust_tasks(self, tasks, alignment_issues):
-        adjuster = TaskAdjuster(self)
-        return adjuster.execute(tasks, alignment_issues)
+        adjuster = TaskAdjuster(
+            agent=self,
+            name="task_adjuster",
+            args={"tasks": tasks, "alignment_issues": alignment_issues},
+            message="Adjust tasks based on alignment issues"
+        )
+        return adjuster.execute()
     def execute_task(self, task):
         # Logic to execute a task using existing tools or newly created ones
         pass

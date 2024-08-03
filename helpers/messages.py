@@ -1,4 +1,4 @@
-from . import files
+from helpers import files
 
 
 def truncate_text(output, threshold=1000):

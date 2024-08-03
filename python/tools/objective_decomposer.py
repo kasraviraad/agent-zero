@@ -1,5 +1,9 @@
+import json
+from helpers.tool import Tool, Response
+
 class ObjectiveDecomposer(Tool):
-    def execute(self, objectives, **kwargs):
+    def execute(self, **kwargs):
+        objectives = kwargs.get('objectives', '')
         decomposed_tasks = self.decompose_objectives(objectives)
         return Response(message=json.dumps(decomposed_tasks), break_loop=False)
 

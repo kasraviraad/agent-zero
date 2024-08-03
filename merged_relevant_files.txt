@@ -328,9 +328,16 @@ File: .gitignore
 File: recent_changes.txt
 --- merged_relevant_files.txt/recent_changes.txt
 +++ current/recent_changes.txt
-@@ -1,3 +0,0 @@
+@@ -1,5 +1,3 @@
 -#==============================================================================
 -
+ File: requirements.txt
+ --- merged_relevant_files.txt/requirements.txt
+ +++ current/requirements.txt
+@@ -287,4 +285,3 @@
+ -    print(f"Recent changes have been written to {output_file}")
+ +    main()
+ 
 -
 
 File: agent.py
@@ -378,8 +385,8 @@ File: main.py
  from python.tools.AlignmentChecker import AlignmentChecker
  input_lock = threading.Lock()
  os.chdir(files.get_abs_path("./work_dir")) #change CWD to work_dir
--import sys
-+import numpy
+-import numpy
++
  
  def load_objectives():
      objectives_path = os.path.join("prompts", "objective.md")
@@ -393,184 +400,208 @@ File: main.py
 File: generate_diff.py
 --- merged_relevant_files.txt/generate_diff.py
 +++ current/generate_diff.py
-@@ -1,10 +1,5 @@
+@@ -1,5 +1,3 @@
 -#==============================================================================
 -
  import os
--import re
  import difflib
--from typing import List
--import sys
  
- def is_relevant_file(file_path):
-     # List of relevant file extensions
-@@ -22,74 +17,78 @@
-             file_name in relevant_files or 
-             dir_name in relevant_dirs)
- 
--def generate_diff(source_dir, merged_dir, current_dir, output_file):
--    with open(output_file, 'w', encoding='utf-8') as outfile:
--        for root, dirs, files in os.walk(source_dir):
--            # Skip hidden directories and common non-code directories
--            dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['node_modules', 'venv', '__pycache__']]
--            
--            for file in files:
--                if file == output_file:
--                    continue  # Skip the output file itself
--                file_path = os.path.join(root, file)
--                if is_relevant_file(file_path):
--                    relative_path = os.path.relpath(file_path, source_dir)
--                    merged_file = os.path.join(merged_dir, relative_path)
--                    current_file = os.path.join(current_dir, relative_path)
--                    
--                    if os.path.exists(current_file):
--                        if os.path.exists(merged_file):
--                            with open(merged_file, 'r', encoding='utf-8') as merged_f, open(current_file, 'r', encoding='utf-8') as current_f:
--                                merged_content = merged_f.read()
--                                current_content = current_f.read()
--                                
--                                if merged_content != current_content:
--                                    outfile.write(f"\n\n# File: {relative_path}\n")
--                                    outfile.write("#" + "=" * 78 + "\n\n")
--                                    outfile.write("--- {}/{}\n".format(merged_dir, relative_path))
--                                    outfile.write("+++ {}/{}\n".format(current_dir, relative_path))
--                                    outfile.write(generate_unified_diff(merged_content, current_content))
--                        else:
--                            # The file exists in the "current" directory but not in the "merged_relevant_files.txt" directory
--                            outfile.write(f"\n\n# File: {relative_path}\n")
--                            outfile.write("#" + "=" * 78 + "\n\n")
--                            outfile.write("+++ {}/{}\n".format(current_dir, relative_path))
--                            with open(current_file, 'r', encoding='utf-8') as current_f:
--                                outfile.write(generate_unified_diff("", current_f.read()))
--                    else:
--                        print(f"File {file_path} does not exist in one of the directories.")
-+def read_merged_file(filepath):
-+    with open(filepath, 'r', encoding='utf-8') as file:
-+        content = file.read()
-+    
-+    files = {}
-+    current_file = None
-+    current_content = []
- 
--def generate_unified_diff(old_content: str, new_content: str) -> str:
--    old_lines = old_content.splitlines()
--    new_lines = new_content.splitlines()
--    diff_lines = unified_diff(old_lines, new_lines, n=3)
--    return '\n'.join(diff_lines)
-+    for line in content.split('\n'):
-+        if line.startswith('# File: '):
-+            if current_file:
-+                files[current_file] = '\n'.join(current_content)
-+            current_file = line[8:].strip()
-+            current_content = []
-+        elif current_file:
-+            current_content.append(line)
- 
--def unified_diff(a: List[str], b: List[str], n: int = 3) -> List[str]:
--    """
--    Generate a unified diff between two lists of strings.
--    Adapted from the difflib.unified_diff() function.
--    """
--    started = False
--    diff = []
--    for line in difflib.unified_diff(a, b, n=n):
--        if line.startswith('---') or line.startswith('+++'):
-+    if current_file:
-+        files[current_file] = '\n'.join(current_content)
-+
-+    return files
-+
-+def get_current_file_content(filepath):
-+    try:
-+        with open(filepath, 'r', encoding='utf-8') as file:
-+            return file.read()
-+    except FileNotFoundError:
-+        return None
-+
-+def generate_diff_report(merged_content, source_dir, max_file_changes=10, max_report_size=10000):
-+    diffs = []
-+    total_report_size = 0
-+
-+    for filepath, old_content in merged_content.items():
-+        if not is_relevant_file(filepath):
-             continue
--        if not started and (line.startswith('@@ ') or line.startswith('-') or line.startswith('+')):
--            started = True
--            diff.append('---')
--        diff.append(line)
--    if started:
--        diff.append('---')
--    return diff
-+
-+        current_file = os.path.join(source_dir, filepath)
-+        current_content = get_current_file_content(current_file)
-+
-+        if old_content.strip() != current_content.strip():
-+            diff = list(difflib.unified_diff(
-+                old_content.splitlines(keepends=True),
-+                current_content.splitlines(keepends=True),
-+                fromfile=f'merged_relevant_files.txt/{filepath}',
-+                tofile=f'current/{filepath}',
-+                n=3  # Number of context lines
-+            ))
-+
-+            if any(line.startswith(('+', '-')) for line in diff):
-+                diffs.append((filepath, ''.join(diff).strip()))
-+                total_report_size += len(''.join(diff).strip()) + len(filepath) + 2  # 2 for the newlines
-+
-+        if len(diffs) >= max_file_changes or total_report_size >= max_report_size:
-+            break
-+
-+    return diffs
-+
-+def write_diff_to_file(diffs, output_file):
-+    with open(output_file, 'w', encoding='utf-8') as file:
-+        for filepath, diff in diffs:
-+            if diff:
-+                file.write(f"File: {filepath}\n{diff}\n\n")
-+
-+def main():
-+    source_dir = os.getcwd()
-+    merged_content = read_merged_file('merged_relevant_files.txt')
-+    diffs = generate_diff_report(merged_content, source_dir, max_file_changes=10, max_report_size=10000)
-+    write_diff_to_file(diffs, 'recent_changes.txt')
-+
-+    print(f"Diff report generated in 'recent_changes.txt'")
-+    print(f"Number of files with significant changes: {len(diffs)}")
+@@ -93,4 +91,4 @@
+     print(f"Number of files with significant changes: {len(diffs)}")
  
  if __name__ == "__main__":
--    if len(sys.argv) != 4:
--        print("Usage: python generate_diff.py <source_dir> <merged_dir> <current_dir>")
--        sys.exit(1)
--    source_dir = sys.argv[1]
--    merged_dir = sys.argv[2]
--    current_dir = sys.argv[3]
--    output_file = 'recent_changes.txt'
--    generate_diff(source_dir, merged_dir, current_dir, output_file)
--    print(f"Recent changes have been written to {output_file}")
+-    main()
 +    main()
 
+File: prompts/tool.knowledge.response.md
+--- merged_relevant_files.txt/prompts/tool.knowledge.response.md
++++ current/prompts/tool.knowledge.response.md
+@@ -1,8 +1,6 @@
+-#==============================================================================
+-
+ ~~~json
+ {
+     "online_sources": "{{online_sources}}",
+     "memory": "{{memory}}",
+ }
+-~~~
++~~~
 
+
+
+# File: agi_node.py
+#==============================================================================
+
+import uuid
+import asyncio
+from typing import Optional
+from modules.network_communication import NetworkCommunication
+from modules.knowledge_base import KnowledgeBase
+from modules.objective_handler import ObjectiveHandler, Objective
+from modules.module_manager import ModuleManager
+from modules.decision_maker import DecisionMaker
+from modules.module_generator import ModuleGenerator
+from modules.knowledge_tool import Knowledge  # Add this import
+from modules.knowledge_base import KnowledgeBase  # Add this import
+from agent import Agent , AgentConfig  # Add this import
+import models  # Import the models module
+
+
+class AGINode(Agent):
+    def __init__(self, host='localhost', port=8080):
+        config = AgentConfig(
+            chat_model=models.get_openai_chat(temperature=0),
+            utility_model=models.get_openai_chat(temperature=0),
+            embeddings_model=models.get_embedding_openai()
+        )
+        super().__init__(number=0,config=config)
+        self.id = f"AGI-Node-{uuid.uuid4()}"
+        self.network = NetworkCommunication(host, port)
+        self.knowledge_base = KnowledgeBase()
+        self.objectives = ObjectiveHandler()
+        self.modules = ModuleManager()
+        self.decision_maker = DecisionMaker(self.knowledge_base, self.objectives)
+        self.module_generator = ModuleGenerator(self.knowledge_base, self.objectives)
+        self.knowledge_tool: Optional[Knowledge] = None
+    def initialize_knowledge_tool(self):
+        self.knowledge_tool = Knowledge(agent=self, name="knowledge", args={}, message="")
+    
+    async def start(self):
+        await self.network.start()
+        await self.join_network()
+        await self.sync_knowledge()
+        await self.align_objectives()
+        print(f"AGI Node {self.id} has started and is ready for operation.")
+    
+    async def join_network(self):
+        print(f"Node {self.id} is attempting to join the network...")
+
+    async def sync_knowledge(self):
+        self.knowledge_base.add_knowledge("problem_solving_techniques", "brainstorming, root cause analysis")
+        self.knowledge_base.add_knowledge("knowledge_expansion_methods", "research, experimentation, collaboration")
+        print(f"Node {self.id} synchronized knowledge.")
+
+    async def align_objectives(self):
+        self.objectives.add_objective(Objective("Improve problem-solving skills", 2))
+        self.objectives.add_objective(Objective("Expand knowledge base", 1))
+        print(f"Node {self.id} aligned objectives.")
+
+    async def run_cycle(self):
+        print(f"\nNode {self.id} running cycle:")
+        print(f"Knowledge: {self.knowledge_base}")
+        print(f"Objectives: {self.objectives}")
+        print(f"Modules: {self.modules}")
+
+        decision = self.decision_maker.make_decision()
+        print(f"Decision: {decision}")
+
+        if decision['action'] == 'acquire_knowledge' and self.knowledge_tool is not None:
+            response = self.knowledge_tool.execute(question=decision['query'])
+            print(f"Acquired knowledge: {response.message}")
+            # Update knowledge base with new information
+            self.knowledge_base.add_knowledge(decision['query'], response.message)
+        else:
+            # Execute other types of actions
+            await self.execute_action(decision['action'])
+
+        overall_progress = self.objectives.evaluate_overall_progress()
+        print(f"Overall progress: {overall_progress:.2f}")
+
+        await asyncio.sleep(5)  # Wait for 5 seconds before the next cycle
+    
+    async def create_custom_module(self, module_name: str, objective: str):
+        print(f"Generating custom module: {module_name}")
+        module_code = await self.module_generator.generate_module(module_name, objective)
+        self.modules.create_module(module_name, module_code)
+        print(f"Created custom module: {module_name}")
+
+    async def execute_action(self, action: str):
+        print(f"Executing action: {action}")
+        
+        action_parts = action.split('_')
+        action_type = action_parts[0]
+        objective_description = '_'.join(action_parts[1:])
+
+        if action_type == 'work_on':
+            module_name = objective_description.replace(' ', '_')
+            module = self.modules.get_module(module_name)
+            if not module:
+                await self.create_custom_module(module_name, objective_description)
+                module = self.modules.get_module(module_name)
+            
+            if module:
+                try:
+                    result = getattr(module, f"solve_{module_name}")(self.knowledge_base, self.objectives)
+                    print(f"{module_name.capitalize()} module result: {result}")
+                    self.knowledge_base.add_knowledge(f"{objective_description}_result", result)
+                except AttributeError:
+                    print(f"Module {module_name} doesn't have a solve_{module_name} method")
+            else:
+                print(f"Failed to create or retrieve module for {objective_description}")
+        
+        elif action_type == 'research':
+            research_result = f"New insights on {objective_description.replace('_', ' ')}"
+            self.knowledge_base.add_knowledge(f"research_result_{objective_description}", research_result)
+            print(f"Research completed: {research_result}")
+        
+        elif action_type == 'finalize':
+            finalize_result = f"Finalized work on {objective_description.replace('_', ' ')}"
+            self.knowledge_base.add_knowledge(f"finalize_result_{objective_description}", finalize_result)
+            print(f"Finalization completed: {finalize_result}")
+        
+        else:
+            print(f"Unknown action type: {action_type}")
+
+        # Update progress
+        for obj in self.objectives.objectives:
+            if obj.description.lower() == objective_description.replace('_', ' ').lower():
+                current_progress = obj.progress
+                new_progress = min(current_progress + 0.2, 1.0)  # Increment progress by 20%
+                self.objectives.update_progress(obj.description, new_progress)
+                break
+
+        # Simulate some time passing
+        await asyncio.sleep(1)  
+
+def create_agi_node(host='localhost', port=8080) -> AGINode:
+    node = AGINode(host, port)
+    node.initialize_knowledge_tool()
+    return node
+# Usage
+async def main():
+    node = create_agi_node()
+    await node.start()
+    while True:
+        await node.run_cycle()
+
+if __name__ == "__main__":
+    asyncio.run(main())
 
 # File: agent.py
 #==============================================================================
 
 from dataclasses import dataclass, field
 import time, importlib, inspect, os, json
-from typing import Any, Optional, Dict
-from python.helpers import extract_tools, rate_limiter, files, errors
-from python.helpers.print_style import PrintStyle
-from langchain.schema import AIMessage
+from typing import Any, Optional, Dict, List
+from .helpers import extract_tools, rate_limiter, files, errors
+from .helpers.print_style import PrintStyle
+from langchain.schema import AIMessage,  HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.embeddings import Embeddings
+from modules.knowledge_base import KnowledgeBase
+from modules.objective_handler import ObjectiveHandler
+from python.tools.objective_decomposer import ObjectiveDecomposer
+
+from python.tools.task_adjuster import TaskAdjuster
+
 
 @dataclass
 class AgentConfig: 
-    chat_model:BaseChatModel
-    utility_model: BaseChatModel
-    embeddings_model:Embeddings
+    chat_model: Any
+    utility_model: Any
+    embeddings_model: Any
     memory_subdir: str = ""
     auto_memory_count: int = 3
     auto_memory_skip: int = 2
@@ -604,7 +635,9 @@ class Agent:
     def __init__(self, number:int, config: AgentConfig):
 
         # agent config  
-        self.config = config       
+        self.config = config
+        self.knowledge_base = KnowledgeBase()
+        self.objectives = ObjectiveHandler()       
 
         # non-config vars
         self.number = number
@@ -613,7 +646,7 @@ class Agent:
         self.system_prompt = files.read_file("./prompts/agent.system.md").replace("{", "{{").replace("}", "}}")
         self.tools_prompt = files.read_file("./prompts/agent.tools.md").replace("{", "{{").replace("}", "}}")
 
-        self.history = []
+        self.history: List[AIMessage | HumanMessage] = []
         self.last_message = ""
         self.intervention_message = ""
         self.intervention_status = False
@@ -696,16 +729,11 @@ class Agent:
     def set_data(self, field:str, value):
         self.data[field] = value
 
-    def append_message(self, msg: str, human: bool = False):
-        message_type = "human" if human else "ai"
-        if self.history and self.history[-1].type == message_type:
-            self.history[-1].content += "\n\n" + msg
+    def append_message(self, message: str, human: bool = False):
+        if human:
+            self.history.append(HumanMessage(content=message))
         else:
-            new_message = HumanMessage(content=msg) if human else AIMessage(content=msg)
-            self.history.append(new_message)
-            self.cleanup_history(self.config.msgs_keep_max, self.config.msgs_keep_start, self.config.msgs_keep_end)
-        if message_type=="ai":
-            self.last_message = msg
+            self.history.append(AIMessage(content=message))
 
     def concat_messages(self,messages):
         return "\n".join([f"{msg.type}: {msg.content}" for msg in messages])
@@ -777,15 +805,16 @@ class Agent:
 
         return self.history
 
-    def handle_intervention(self, progress:str="") -> bool:
-        while self.paused: time.sleep(0.1) # wait if paused
-        if self.intervention_message and not self.intervention_status: # if there is an intervention message, but not yet processed
-            if progress.strip(): self.append_message(progress) # append the response generated so far
-            user_msg = files.read_file("./prompts/fw.intervention.md", user_message=self.intervention_message) # format the user intervention template
-            self.append_message(user_msg,human=True) # append the intervention message
-            self.intervention_message = "" # reset the intervention message
+    def handle_intervention(self, progress: str = "") -> bool:
+        while self.paused: time.sleep(0.1)
+        if self.intervention_message and not self.intervention_status:
+            if progress.strip(): self.append_message(progress)
+            user_msg = files.read_file("./prompts/fw.intervention.md", user_message=self.intervention_message)
+            self.append_message(user_msg, human=True)
+            self.intervention_message = ""
             self.intervention_status = True
-        return self.intervention_status # return intervention status
+        return self.intervention_status
+        
 
     def process_tools(self, msg: str):
         # search for tool usage requests in agent message
@@ -816,7 +845,7 @@ class Agent:
 
     def get_tool(self, name: str, args: dict, message: str, **kwargs):
         from python.tools.unknown import Unknown 
-        from python.helpers.tool import Tool
+        from .helpers.tool import Tool
         
         tool_class = Unknown
         if files.exists("python/tools",f"{name}.py"): 
@@ -853,12 +882,24 @@ class Agent:
     def call_extension(self, name: str, **kwargs) -> Any:
         pass
     def decompose_objective(self, objective):
-        decomposer = ObjectiveDecomposer(self)
-        return decomposer.execute(objective)
+        from python.tools.objective_decomposer import ObjectiveDecomposer
+        decomposer = ObjectiveDecomposer(
+            agent=self,
+            name="objective_decomposer",
+            args={"objectives": objective},
+            message="Decompose the given objective"
+        )
+        return decomposer.execute()
 
-    def create_tool(self, description):
-        creator = ToolCreator(self)
-        return creator.execute(description)
+    def create_tool(self, description: str) -> Any:
+        from python.tools.tool_creator import ToolCreator
+        creator = ToolCreator(
+            agent=self,
+            name="tool_creator",
+            args={"description": description},
+            message="Create a new tool"
+        )
+        return creator.execute()
 
     def adjust_tasks(self, tasks, alignment_issues):
         adjuster = TaskAdjuster(self)
@@ -922,15 +963,15 @@ import threading, time, models, os, json
 from ansio import application_keypad, mouse_input, raw_input
 from ansio.input import InputEvent, get_input_event
 from agent import Agent, AgentConfig
-from python.helpers.print_style import PrintStyle
-from python.helpers.files import read_file
-from python.helpers import files
-import python.helpers.timed_input as timed_input
+from .helpers.print_style import PrintStyle
+from .helpers.files import read_file
+from .helpers import files
+import helpers.timed_input as timed_input
 from python.tools.task_adjuster import TaskAdjuster
 from python.tools.AlignmentChecker import AlignmentChecker
 input_lock = threading.Lock()
 os.chdir(files.get_abs_path("./work_dir")) #change CWD to work_dir
-import numpy
+
 
 def load_objectives():
     objectives_path = os.path.join("prompts", "objective.md")
@@ -1170,7 +1211,7 @@ if __name__ == "__main__":
 
 ~~~json
 {
-    "online_sources": "{{online_sources}}",
+    "Online Sources:{{online_sources}}",
     "memory": "{{memory}}",
 }
 ~~~
@@ -1822,425 +1863,391 @@ CMD ["/usr/local/bin/initialize.sh"]
 
 docker buildx build --platform linux/amd64,linux/arm64 -t frdel/agent-zero-exe:latest --push .
 
-# File: python/__init__.py
+# File: modules/__init__.py
 #==============================================================================
 
 
 
-# File: python/tools/memory_tool.py
+# File: modules/memory_tool.py
 #==============================================================================
 
-import re
-from agent import Agent
-from python.helpers.vector_db import VectorDB, Document
-from python.helpers import files
-import os, json
-from python.helpers.tool import Tool, Response
-from python.helpers.print_style import PrintStyle
+from typing import Any
 
-# TODO multiple DBs at once
-db: VectorDB | None= None
+def search(agent: Any, query: str) -> str:
+    # Implement your memory search logic here
+    # For now, we'll return a placeholder
+    return f"Memory search result for query: {query}"
 
-class Memory(Tool):
-    def execute(self,**kwargs):
-        result=""
-        
-        if "query" in kwargs:
-            if "threshold" in kwargs: threshold = float(kwargs["threshold"]) 
-            else: threshold = 0.1
-            if "count" in kwargs: count = int(kwargs["count"]) 
-            else: count = 5
-            result = search(self.agent, kwargs["query"], count, threshold)
-        elif "memorize" in kwargs:
-            result = save(self.agent, kwargs["memorize"])
-        elif "forget" in kwargs:
-            result = forget(self.agent, kwargs["forget"])
-        elif "delete" in kwargs:
-            result = delete(self.agent, kwargs["delete"])
-                        
-        # result = process_query(self.agent, self.args["memory"],self.args["action"], result_count=self.agent.config.auto_memory_count)
-        return Response(message=result, break_loop=False)
-            
-def search(agent:Agent, query:str, count:int=5, threshold:float=0.1):
-    initialize(agent)
-    docs = db.search_similarity_threshold(query,count,threshold) # type: ignore
-    if len(docs)==0: return files.read_file("./prompts/fw.memories_not_found.md", query=query)
-    else: return str(docs)
-
-def save(agent:Agent, text:str):
-    initialize(agent)
-    id = db.insert_document(text) # type: ignore
-    return files.read_file("./prompts/fw.memory_saved.md", memory_id=id)
-
-def delete(agent:Agent, ids_str:str):
-    initialize(agent)
-    ids = extract_guids(ids_str)
-    deleted = db.delete_documents_by_ids(ids) # type: ignore
-    return files.read_file("./prompts/fw.memories_deleted.md", memory_count=deleted)    
-
-def forget(agent:Agent, query:str):
-    initialize(agent)
-    deleted = db.delete_documents_by_query(query) # type: ignore
-    return files.read_file("./prompts/fw.memories_deleted.md", memory_count=deleted)
-
-def initialize(agent:Agent):
-    global db
-    if not db:
-        dir = os.path.join("memory",agent.config.memory_subdir)
-        db = VectorDB(embeddings_model=agent.config.embeddings_model, in_memory=False, cache_dir=dir)
-
-def extract_guids(text):
-    pattern = r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b'
-    return re.findall(pattern, text)
-
-# File: python/tools/online_knowledge_tool.py
+# File: modules/decision_maker.py
 #==============================================================================
 
-from agent import Agent
-from python.helpers import perplexity_search
-from python.helpers.tool import Tool, Response
+from typing import List, Dict, Any
+from .knowledge_base import KnowledgeBase
+from .objective_handler import ObjectiveHandler, Objective
 
-class OnlineKnowledge(Tool):
-    def execute(self,**kwargs):
-        return Response(
-            message=process_question(self.args["question"]),
-            break_loop=False,
-        )
+class DecisionMaker:
+    def __init__(self, knowledge_base: KnowledgeBase, objective_handler: ObjectiveHandler):
+        self.knowledge_base = knowledge_base
+        self.objective_handler = objective_handler
 
-def process_question(question):
-    return str(perplexity_search.perplexity_search(question))
+    def make_decision(self) -> Dict[str, Any]:
+        top_objective = self.objective_handler.get_top_objective()
+        if not top_objective:
+            return {"action": "idle", "reason": "No objectives available"}
 
-# File: python/tools/task_adjuster.py
-#==============================================================================
+        relevant_knowledge = self.get_relevant_knowledge(top_objective)
+        action = self.determine_action(top_objective, relevant_knowledge)
 
-from python.helpers.tool import Tool, Response
-import json
+        return {
+            "action": action,
+            "objective": str(top_objective),
+            "reason": f"Based on objective and relevant knowledge: {relevant_knowledge}"
+        }
 
-class TaskAdjuster(Tool):
-    def execute(self, tasks, alignment_issues, **kwargs):
-        adjusted_tasks = self.adjust_tasks(tasks, alignment_issues)
-        return Response(message=json.dumps(adjusted_tasks), break_loop=False)
+    def get_relevant_knowledge(self, objective: Objective) -> List[str]:
+        # This is a simplified version. In a more advanced system,
+        # this would involve more sophisticated knowledge retrieval.
+        return [
+            value for key, value in self.knowledge_base.knowledge.items()
+            if objective.description.lower() in key.lower()
+        ]
 
-    def adjust_tasks(self, tasks, alignment_issues):
-        adjustment_prompt = f"Adjust these tasks to resolve the following alignment issues: Tasks: {json.dumps(tasks)}. Alignment issues: {json.dumps(alignment_issues)}"
-        adjustment_result = self.agent.config.chat_model.generate(adjustment_prompt)
-        
-        # Parse the result to get adjusted tasks
-        # This is a simplified example; you'd need more sophisticated parsing
-        adjusted_tasks = json.loads(adjustment_result)
-        
-        return adjusted_tasks
+    def determine_action(self, objective: Objective, relevant_knowledge: List[str]) -> str:
+        # This is a placeholder for more complex decision-making logic
+        if not relevant_knowledge:
+            return f"research_{objective.description.replace(' ', '_')}"
+        elif objective.progress < 0.5:
+            return f"work_on_{objective.description.replace(' ', '_')}"
+        else:
+            return f"finalize_{objective.description.replace(' ', '_')}"
 
-# File: python/tools/knowledge_tool.py
+# File: modules/knowledge_tool.py
 #==============================================================================
 
 import os
-from agent import Agent
-from . import online_knowledge_tool
-from python.helpers import perplexity_search
-from python.helpers import duckduckgo_search
-
-from . import memory_tool
 import concurrent.futures
+from typing import Dict, Any,TYPE_CHECKING
+from . import memory_tool
+from ..helpers import perplexity_search, duckduckgo_search, files
+from ..helpers.tool import Tool, Response
 
-
-
-from python.helpers.tool import Tool, Response
-from python.helpers import files
-
+if TYPE_CHECKING:
+    from agent import Agent
 class Knowledge(Tool):
-    def execute(self, question="", **kwargs):
+    def __init__(self, agent: 'Agent', name: str, args: Dict[str, Any], message: str):
+        super().__init__(agent, name, args, message)
+    def execute(self, question: str = "", **kwargs) -> Response:
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            # Schedule the two functions to be run in parallel
+            futures = []
 
-            # perplexity search, if API provided
+            # Perplexity search, if API provided
             if os.getenv("API_KEY_PERPLEXITY"):
-                perplexity = executor.submit(perplexity_search.perplexity_search, question)
-            else: perplexity = None
+                futures.append(executor.submit(perplexity_search.perplexity_search, question))
+            
+            # DuckDuckGo search
+            futures.append(executor.submit(duckduckgo_search.search, question))
 
-            # duckduckgo search
-            duckduckgo = executor.submit(duckduckgo_search.search, question)
+            # Memory search
+            futures.append(executor.submit(memory_tool.search, self.agent, question))
 
-            # memory search
-            future_memory = executor.submit(memory_tool.search, self.agent, question)
+            # Wait for all functions to complete
+            results = [future.result() for future in futures]
 
-            # Wait for both functions to complete
-            perplexity_result = (perplexity.result() if perplexity else "") or ""
-            duckduckgo_result = duckduckgo.result()
-            memory_result = future_memory.result()
+        # Combine results
+        online_sources = "\n\n".join(filter(None, results[:-1]))  # All but the last result (memory)
+        memory_result = results[-1]
 
         msg = files.read_file("prompts/tool.knowledge.response.md", 
-                              online_sources = perplexity_result + "\n\n" + str(duckduckgo_result),
-                              memory = memory_result )
+                              online_sources=online_sources,
+                              memory=memory_result)
 
-        if self.agent.handle_intervention(msg): pass # wait for intervention and handle it, if paused
+        if self.agent.handle_intervention(msg): pass  # Wait for intervention and handle it, if paused
 
-        return Response(message=msg, break_loop=False)
+        return Response(message=f"Knowledge about: {question}", break_loop=False)
 
-# File: python/tools/AlignmentChecker.py
+# File: modules/module_generator.py
 #==============================================================================
 
-class AlignmentChecker(Tool):
-    def execute(self, tasks, original_objective, **kwargs):
-        alignment_issues = self.check_alignment(tasks, original_objective)
-        if alignment_issues:
-            return Response(message=json.dumps(alignment_issues), break_loop=False)
-        return Response(message="All tasks aligned with objectives", break_loop=False)
+import asyncio
+from typing import List, Dict
+from .knowledge_base import KnowledgeBase
+from .objective_handler import ObjectiveHandler
 
-    def check_alignment(self, tasks, original_objective):
-        prompt = f"Check if these tasks align with the original objective. Original objective: {original_objective}. Tasks: {json.dumps(tasks)}"
-        result = self.agent.config.chat_model.generate(prompt)
-        # Parse the result to identify any alignment issues
-        # This is a simplified example; you'd need more sophisticated parsing
-        return [issue.strip() for issue in result.split("\n") if "misalignment" in issue.lower()]
+class ModuleGenerator:
+    def __init__(self, knowledge_base: KnowledgeBase, objective_handler: ObjectiveHandler):
+        self.knowledge_base = knowledge_base
+        self.objective_handler = objective_handler
 
-# File: python/tools/tool_creator.py
+    async def generate_module(self, module_name: str, objective: str) -> str:
+        subtasks = self.decompose_task(objective)
+        module_code = await self.execute_subtasks(subtasks, module_name)
+        return module_code
+
+    def decompose_task(self, objective: str) -> List[Dict[str, str]]:
+        return [
+            {"type": "define_interface", "description": f"Define the interface for the {objective} module"},
+            {"type": "implement_logic", "description": f"Implement the core logic for {objective}"},
+            {"type": "add_knowledge_interaction", "description": "Add interactions with the knowledge base"},
+            {"type": "implement_progress_tracking", "description": "Implement progress tracking for the objective"},
+            {"type": "add_error_handling", "description": "Add error handling and edge case management"},
+        ]
+
+    async def execute_subtasks(self, subtasks: List[Dict[str, str]], module_name: str) -> str:
+        module_parts = []
+        for subtask in subtasks:
+            part = await self.execute_subtask(subtask, module_name)
+            module_parts.append(part)
+        return "\n\n".join(module_parts)
+
+    async def execute_subtask(self, subtask: Dict[str, str], module_name: str) -> str:
+        # In a more advanced system, this could use language models or other AI techniques
+        # to generate code for each subtask. For now, we'll use predefined templates.
+        if subtask["type"] == "define_interface":
+            return f"def solve_{module_name}(knowledge, objective_handler):"
+        elif subtask["type"] == "implement_logic":
+            return f"    print(f'Executing {module_name}...')\n    # Core logic implementation"
+        elif subtask["type"] == "add_knowledge_interaction":
+            return f"    current_knowledge = knowledge.get_knowledge('{module_name}_data', '{{}}')\n    # Interact with knowledge"
+        elif subtask["type"] == "implement_progress_tracking":
+            return f"    objective_handler.update_progress('{module_name}', 0.5)  # Update progress"
+        elif subtask["type"] == "add_error_handling":
+            return "    try:\n        # Main logic here\n    except Exception as e:\n        print(f'Error in {module_name}: {{e}}')"
+        return ""
+
+# File: modules/knowledge_base.py
 #==============================================================================
 
-from python.helpers.tool import Tool, Response
+import json
+from typing import Dict, Any, Optional
 
-class ToolCreator(Tool):
-    def execute(self, tool_description, **kwargs):
-        tool_code = self.generate_tool_code(tool_description)
-        self.save_tool(tool_code)
-        return Response(message=f"Tool created: {tool_description}", break_loop=False)
+class KnowledgeBase:
+    def __init__(self, initial_knowledge: Optional[Dict[str, Any]] = None):
+        self.knowledge: Dict[str, Any] = initial_knowledge if initial_knowledge is not None else {}
 
-    def generate_tool_code(self, description):
-        prompt = f"Generate Python code for a tool that does the following: {description}"
-        return self.agent.config.chat_model.generate(prompt)
+    def add_knowledge(self, key: str, value: Any):
+        self.knowledge[key] = value
 
-    def save_tool(self, code):
-        # Logic to save the generated tool code
-        pass
+    def get_knowledge(self, key: str) -> Any:
+        return self.knowledge.get(key)
 
-# File: python/tools/response.py
+    def update_knowledge(self, new_knowledge: Dict[str, Any]):
+        self.knowledge.update(new_knowledge)
+
+    def serialize(self) -> str:
+        return json.dumps(self.knowledge)
+
+    @classmethod
+    def deserialize(cls, serialized_data: str):
+        return cls(json.loads(serialized_data))
+
+    def sync_with_peer(self, peer_knowledge: Dict[str, Any]):
+        for key, value in peer_knowledge.items():
+            if key not in self.knowledge or self.knowledge[key] != value:
+                self.knowledge[key] = value
+        # Here, we might want to add more sophisticated merging logic in the future
+
+    def __str__(self):
+        return f"KnowledgeBase(items: {len(self.knowledge)})"
+
+# File: modules/network_communication.py
 #==============================================================================
 
-from agent import Agent
-from python.helpers import files
-from python.helpers.print_style import PrintStyle
+import asyncio
+import aiohttp
+from aiohttp import web
+import json
 
-from agent import Agent
-from python.helpers.tool import Tool, Response
-from python.helpers import files
-from python.helpers.print_style import PrintStyle
+class NetworkCommunication:
+    def __init__(self, host='localhost', port=8080):
+        self.host = host
+        self.port = port
+        self.peers = set()
+        self.app = web.Application()
+        self.app.router.add_post('/message', self.handle_message)
+        self.app.router.add_post('/register_peer', self.register_peer)
 
-class ResponseTool(Tool):
+    async def start(self):
+        runner = web.AppRunner(self.app)
+        await runner.setup()
+        site = web.TCPSite(runner, self.host, self.port)
+        await site.start()
+        print(f"Server started at http://{self.host}:{self.port}")
 
-    def execute(self,**kwargs):
-        self.agent.set_data("timeout", self.agent.config.response_timeout_seconds)
-        return Response(message=self.args["text"], break_loop=True)
+    async def register_peer(self, request):
+        data = await request.json()
+        peer_address = data.get('address')
+        if peer_address:
+            self.peers.add(peer_address)
+            return web.Response(text="Peer registered successfully")
+        return web.Response(text="Invalid peer data", status=400)
 
-    def before_execution(self, **kwargs):
-        pass # do not add anything to the history or output
-    
-    def after_execution(self, response, **kwargs):
-        pass # do not add anything to the history or output
+    async def handle_message(self, request):
+        data = await request.json()
+        message = data.get('message')
+        if message:
+            print(f"Received message: {message}")
+            return web.Response(text="Message received")
+        return web.Response(text="Invalid message", status=400)
 
-# File: python/tools/call_subordinate.py
-#==============================================================================
+    async def send_message(self, peer, message):
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f'http://{peer}/message', json={'message': message}) as response:
+                return await response.text()
 
-from agent import Agent
-from python.helpers.tool import Tool, Response
-from python.helpers import files
-from python.helpers.print_style import PrintStyle
-
-class Delegation(Tool):
-
-    def execute(self, message="", reset="", **kwargs):
-        # create subordinate agent using the data object on this agent and set superior agent to his data object
-        if self.agent.get_data("subordinate") is None or str(reset).lower().strip() == "true":
-            subordinate = Agent(self.agent.number+1, self.agent.config)
-            subordinate.set_data("superior", self.agent)
-            self.agent.set_data("subordinate", subordinate) 
-        # run subordinate agent message loop
-        return Response( message=self.agent.get_data("subordinate").message_loop(message), break_loop=False)
-
-# File: python/tools/objective_decomposer.py
-#==============================================================================
-
-class ObjectiveDecomposer(Tool):
-    def execute(self, objectives, **kwargs):
-        decomposed_tasks = self.decompose_objectives(objectives)
-        return Response(message=json.dumps(decomposed_tasks), break_loop=False)
-
-    def decompose_objectives(self, objectives):
-        decomposition_prompt = f"Decompose these objectives into subtasks: {objectives}"
-        decomposition_result = self.agent.config.chat_model.generate(decomposition_prompt)
-        
+    async def broadcast_message(self, message):
         tasks = []
-        for task_description in decomposition_result.split("\n"):
-            if task_description.strip():
-                task_type = self.classify_task(task_description)
-                task = {"description": task_description.strip(), "type": task_type}
-                if task_type == "executable":
-                    task["code"] = self.generate_task_code(task_description)
-                tasks.append(task)
-        
-        return tasks
+        for peer in self.peers:
+            tasks.append(self.send_message(peer, message))
+        await asyncio.gather(*tasks)
 
-    def classify_task(self, task):
-        if "create tool" in task.lower():
-            return "needs_tool"
-        elif any(keyword in task.lower() for keyword in ["analyze", "compute", "calculate"]):
-            return "executable"
-        else:
-            return "needs_decomposition"
+# Example usage
+async def main():
+    net_comm = NetworkCommunication()
+    await net_comm.start()
 
-    def generate_task_code(self, task_description):
-        code_prompt = f"Generate Python code to accomplish this task: {task_description}"
-        return self.agent.config.chat_model.generate(code_prompt)
+    # Keep the server running
+    await asyncio.Event().wait()
 
-# File: python/tools/code_execution_tool.py
+if __name__ == "__main__":
+    asyncio.run(main())
+
+# File: modules/objective_handler.py
 #==============================================================================
 
-from dataclasses import dataclass
-import os, json, contextlib, subprocess, ast, shlex
-from io import StringIO
-import time
-from typing import Literal
-from python.helpers import files, messages
-from agent import Agent
-from python.helpers.tool import Tool, Response
-from python.helpers import files
-from python.helpers.print_style import PrintStyle
-from python.helpers.shell_local import LocalInteractiveSession
-from python.helpers.shell_ssh import SSHInteractiveSession
-from python.helpers.docker import DockerContainerManager
+import json
+from typing import List, Dict, Any, Optional
 
-@dataclass
-class State:
-    shell: LocalInteractiveSession | SSHInteractiveSession
-    docker: DockerContainerManager | None
+class Objective:
+    def __init__(self, description: str, priority: int = 1, progress: float = 0.0):
+        self.description = description
+        self.priority = priority
+        self.progress = progress
+
+    def __str__(self):
+        return f"Objective(description: {self.description}, priority: {self.priority}, progress: {self.progress:.2f})"
+
+class ObjectiveHandler:
+    def __init__(self):
+        self.objectives: List[Objective] = []
+
+    def add_objective(self, objective: Objective):
+        self.objectives.append(objective)
+        self.objectives.sort(key=lambda x: x.priority, reverse=True)
+
+    def remove_objective(self, description: str):
+        self.objectives = [obj for obj in self.objectives if obj.description != description]
+
+    def get_top_objective(self) -> Optional[Objective]:
+        return self.objectives[0] if self.objectives else None
+
+    def update_progress(self, description: str, progress: float):
+        for obj in self.objectives:
+            if obj.description == description:
+                obj.progress = min(max(progress, 0.0), 1.0)  # Ensure progress is between 0 and 1
+                break
+
+    def evaluate_overall_progress(self) -> float:
+        if not self.objectives:
+            return 1.0  # If there are no objectives, we consider everything complete
+        total_priority = sum(obj.priority for obj in self.objectives)
+        weighted_progress = sum(obj.progress * obj.priority for obj in self.objectives)
+        return weighted_progress / total_priority if total_priority > 0 else 1.0
+
+    def serialize(self) -> str:
+        return json.dumps([{
+            "description": obj.description, 
+            "priority": obj.priority,
+            "progress": obj.progress
+        } for obj in self.objectives])
+
+    @classmethod
+    def deserialize(cls, serialized_data: str):
+        handler = cls()
+        objectives_data = json.loads(serialized_data)
+        for obj_data in objectives_data:
+            handler.add_objective(Objective(
+                obj_data["description"], 
+                obj_data["priority"],
+                obj_data.get("progress", 0.0)
+            ))
+        return handler
+
+    def align_objectives(self, peer_objectives: List[Dict[str, Any]]):
+        # This is a simple alignment strategy. In a real-world scenario, 
+        # this would involve more complex negotiation and consensus algorithms.
+        new_objectives = [Objective(
+            obj["description"], 
+            obj["priority"],
+            obj.get("progress", 0.0)
+        ) for obj in peer_objectives]
         
-
-class CodeExecution(Tool):
-
-    def execute(self,**kwargs):
-
-        if self.agent.handle_intervention(): return Response(message="", break_loop=False)  # wait for intervention and handle it, if paused
-        
-        self.prepare_state()
-
-        # os.chdir(files.get_abs_path("./work_dir")) #change CWD to work_dir
-        
-        runtime = self.args["runtime"].lower().strip()
-        if runtime == "python":
-            response = self.execute_python_code(self.args["code"])
-        elif runtime == "nodejs":
-            response = self.execute_nodejs_code(self.args["code"])
-        elif runtime == "terminal":
-            response = self.execute_terminal_command(self.args["code"])
-        elif runtime == "output":
-            response = self.get_terminal_output()
-        else:
-            response = files.read_file("./prompts/fw.code_runtime_wrong.md", runtime=runtime)
-
-        if not response: response = files.read_file("./prompts/fw.code_no_output.md")
-        return Response(message=response, break_loop=False)
-
-    def after_execution(self, response, **kwargs):
-        msg_response = files.read_file("./prompts/fw.tool_response.md", tool_name=self.name, tool_response=response.message)
-        self.agent.append_message(msg_response, human=True)
-
-    def prepare_state(self):
-        self.state = self.agent.get_data("cot_state")
-        if not self.state:
-
-            #initialize docker container if execution in docker is configured
-            if self.agent.config.code_exec_docker_enabled:
-                docker = DockerContainerManager(name=self.agent.config.code_exec_docker_name, image=self.agent.config.code_exec_docker_image, ports=self.agent.config.code_exec_docker_ports, volumes=self.agent.config.code_exec_docker_volumes)
-                docker.start_container()
-            else: docker = None
-
-            #initialize local or remote interactive shell insterface
-            if self.agent.config.code_exec_ssh_enabled:
-                shell = SSHInteractiveSession(self.agent.config.code_exec_ssh_addr,self.agent.config.code_exec_ssh_port,self.agent.config.code_exec_ssh_user,self.agent.config.code_exec_ssh_pass)
-            else: shell = LocalInteractiveSession()
-                
-            self.state = State(shell=shell,docker=docker)
-            shell.connect()
-        self.agent.set_data("cot_state", self.state)
-    
-    def execute_python_code(self, code):
-        escaped_code = shlex.quote(code)
-        command = f'python3 -c {escaped_code}'
-        return self.terminal_session(command)
-
-    def execute_nodejs_code(self, code):
-        escaped_code = shlex.quote(code)
-        command = f'node -e {escaped_code}'
-        return self.terminal_session(command)
-
-    def execute_terminal_command(self, command):
-        return self.terminal_session(command)
-
-    def terminal_session(self, command):
-
-        if self.agent.handle_intervention(): return ""  # wait for intervention and handle it, if paused
-       
-        self.state.shell.send_command(command)
-
-        PrintStyle(background_color="white",font_color="#1B4F72",bold=True).print(f"{self.agent.agent_name} code execution output:")
-        return self.get_terminal_output()
-
-    def get_terminal_output(self):
-        idle=0
-        while True:       
-            time.sleep(0.1)  # Wait for some output to be generated
-            full_output, partial_output = self.state.shell.read_output()
-
-            if self.agent.handle_intervention(): return full_output  # wait for intervention and handle it, if paused
-        
-            if partial_output:
-                PrintStyle(font_color="#85C1E9").stream(partial_output)
-                idle=0    
+        # Merge objectives, keeping the highest priority and progress for each
+        merged_objectives = {}
+        for obj in self.objectives + new_objectives:
+            if obj.description in merged_objectives:
+                existing = merged_objectives[obj.description]
+                existing.priority = max(existing.priority, obj.priority)
+                existing.progress = max(existing.progress, obj.progress)
             else:
-                idle+=1
-                if ( full_output and idle > 30 ) or ( not full_output and idle > 100 ): return full_output
-                           
+                merged_objectives[obj.description] = obj
+        
+        self.objectives = list(merged_objectives.values())
+        self.objectives.sort(key=lambda x: x.priority, reverse=True)
 
-# File: python/tools/unknown.py
+    def __str__(self):
+        return f"ObjectiveHandler(objectives: {len(self.objectives)}, overall progress: {self.evaluate_overall_progress():.2f})"
+
+# File: modules/module_manager.py
 #==============================================================================
 
-from python.helpers.tool import Tool, Response
-from python.helpers import files
+import importlib
+import importlib.util
+import os
+from typing import Dict, Any
 
-class Unknown(Tool):
-    def execute(self, **kwargs):
-        return Response(
-                message=files.read_file("prompts/fw.tool_not_found.md",
-                                        tool_name=self.name,
-                                        tools_prompt=files.read_file("prompts/agent.tools.md")), 
-                break_loop=False)
+class ModuleManager:
+    def __init__(self, modules_dir: str = "custom_modules"):
+        self.modules_dir = modules_dir
+        self.modules: Dict[str, Any] = {}
+        self.load_modules()
 
+    def load_modules(self):
+        for filename in os.listdir(self.modules_dir):
+            if filename.endswith(".py") and not filename.startswith("__"):
+                module_name = filename[:-3]
+                module = importlib.import_module(f"{self.modules_dir}.{module_name}")
+                self.modules[module_name] = module
 
+    def get_module(self, module_name: str) -> Any:
+        return self.modules.get(module_name)
 
-# File: python/tools/task_done.py
-#==============================================================================
+    def create_module(self, module_name: str, module_code: str):
+        module_path = os.path.join(self.modules_dir, f"{module_name}.py")
+        with open(module_path, "w") as f:
+            f.write(module_code)
+        
+        # Reload the module
+        spec = importlib.util.spec_from_file_location(module_name, module_path)
+        if spec is not None:
+            module = importlib.util.module_from_spec(spec)
+            if spec.loader is not None:
+                spec.loader.exec_module(module)
+                self.modules[module_name] = module
+                return module
+        
+        raise ImportError(f"Failed to create module {module_name}")
 
-from agent import Agent
-from python.helpers import files
-from python.helpers.print_style import PrintStyle
+    def remove_module(self, module_name: str):
+        if module_name in self.modules:
+            del self.modules[module_name]
+            module_path = os.path.join(self.modules_dir, f"{module_name}.py")
+            if os.path.exists(module_path):
+                os.remove(module_path)
 
-from agent import Agent
-from python.helpers.tool import Tool, Response
-from python.helpers import files
-from python.helpers.print_style import PrintStyle
+    def __str__(self):
+        return f"ModuleManager(modules: {list(self.modules.keys())})"
 
-class TaskDone(Tool):
-
-    def execute(self,**kwargs):
-        self.agent.set_data("timeout", 0)
-        return Response(message=self.args["text"], break_loop=True)
-
-    def before_execution(self, **kwargs):
-        pass # do not add anything to the history or output
-    
-    def after_execution(self, response, **kwargs):
-        pass # do add anything to the history or output
-
-# File: python/helpers/vector_db.py
+# File: helpers/vector_db.py
 #==============================================================================
 
 from langchain.storage import InMemoryByteStore, LocalFileStore
@@ -2329,7 +2336,7 @@ class VectorDB:
 
 
 
-# File: python/helpers/files.py
+# File: helpers/files.py
 #==============================================================================
 
 import os, re, sys
@@ -2366,7 +2373,7 @@ def get_base_dir():
     base_dir = os.path.dirname(os.path.abspath(os.path.join(__file__,"../../")))
     return base_dir
 
-# File: python/helpers/extract_tools.py
+# File: helpers/extract_tools.py
 #==============================================================================
 
 import re, os
@@ -2570,7 +2577,7 @@ def fix_json_string(json_string):
 # tool_usages = extract_tool_usages(response)
 # print(tool_usages)
 
-# File: python/helpers/docker.py
+# File: helpers/docker.py
 #==============================================================================
 
 import time
@@ -2628,7 +2635,7 @@ class DockerContainerManager:
             time.sleep(5) # this helps to get SSH ready
 
 
-# File: python/helpers/shell_ssh.py
+# File: helpers/shell_ssh.py
 #==============================================================================
 
 import paramiko
@@ -2721,7 +2728,7 @@ class SSHInteractiveSession:
         
         return cleaned
 
-# File: python/helpers/duckduckgo_search.py
+# File: helpers/duckduckgo_search.py
 #==============================================================================
 
 # from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
@@ -2755,7 +2762,7 @@ def search(query: str, results = 5, region = "wt-wt", time="y") -> list[str]:
         results.append(str(s))
     return results
 
-# File: python/helpers/print_style.py
+# File: helpers/print_style.py
 #==============================================================================
 
 import os, webcolors, html
@@ -2882,7 +2889,7 @@ import atexit
 atexit.register(PrintStyle._close_html_log)
 
 
-# File: python/helpers/timed_input.py
+# File: helpers/timed_input.py
 #==============================================================================
 
 from inputimeout import inputimeout, TimeoutOccurred
@@ -2895,7 +2902,7 @@ def timeout_input(prompt, timeout=10):
     except TimeoutOccurred:
         return ""
 
-# File: python/helpers/dirty_json.py
+# File: helpers/dirty_json.py
 #==============================================================================
 
 class DirtyJson:
@@ -3160,7 +3167,7 @@ class DirtyJson:
         return result
 
 
-# File: python/helpers/messages.py
+# File: helpers/messages.py
 #==============================================================================
 
 from . import files
@@ -3179,7 +3186,7 @@ def truncate_text(output, threshold=1000):
     truncated_output = output[:start_len] + placeholder + output[-end_len:]
     return truncated_output
 
-# File: python/helpers/vdb.py
+# File: helpers/vdb.py
 #==============================================================================
 
 from langchain.storage import InMemoryByteStore, LocalFileStore
@@ -3253,7 +3260,7 @@ class VectorDB:
 
 
 
-# File: python/helpers/errors.py
+# File: helpers/errors.py
 #==============================================================================
 
 import re
@@ -3289,7 +3296,7 @@ def format_error(e: Exception, max_entries=2):
     
     return result
 
-# File: python/helpers/tool.py
+# File: helpers/tool.py
 #==============================================================================
 
 from abc import abstractmethod
@@ -3338,7 +3345,7 @@ class Tool:
         result = ' '.join(words)
         return result
 
-# File: python/helpers/perplexity_search.py
+# File: helpers/perplexity_search.py
 #==============================================================================
 
 
@@ -3442,7 +3449,7 @@ call_llm = PerplexitySearchLLM(api_key=api_key_from_env,model_name="llama-3-sona
 def perplexity_search(search_query: str):
     return call_llm(search_query)
 
-# File: python/helpers/shell_local.py
+# File: helpers/shell_local.py
 #==============================================================================
 
 import select
@@ -3514,7 +3521,7 @@ class LocalInteractiveSession:
         
         return self.full_output, partial_output
 
-# File: python/helpers/rate_limiter.py
+# File: helpers/rate_limiter.py
 #==============================================================================
 
 import time
@@ -3595,3 +3602,426 @@ def rate_limited_function(input_token_count: int, output_token_count: int):
     # After processing, set the output tokens (this doesn't wait)
     rate_limiter.set_output_tokens(output_token_count)
     print(f"Function completed with {output_token_count} output tokens")
+
+
+# File: python/__init__.py
+#==============================================================================
+
+
+
+# File: python/tools/memory_tool.py
+#==============================================================================
+
+import re
+from agent import Agent
+from python.helpers.vector_db import VectorDB, Document
+from python.helpers import files
+import os, json
+from python.helpers.tool import Tool, Response
+from python.helpers.print_style import PrintStyle
+
+# TODO multiple DBs at once
+db: VectorDB | None= None
+
+class Memory(Tool):
+    def execute(self,**kwargs):
+        result=""
+        
+        if "query" in kwargs:
+            if "threshold" in kwargs: threshold = float(kwargs["threshold"]) 
+            else: threshold = 0.1
+            if "count" in kwargs: count = int(kwargs["count"]) 
+            else: count = 5
+            result = search(self.agent, kwargs["query"], count, threshold)
+        elif "memorize" in kwargs:
+            result = save(self.agent, kwargs["memorize"])
+        elif "forget" in kwargs:
+            result = forget(self.agent, kwargs["forget"])
+        elif "delete" in kwargs:
+            result = delete(self.agent, kwargs["delete"])
+                        
+        # result = process_query(self.agent, self.args["memory"],self.args["action"], result_count=self.agent.config.auto_memory_count)
+        return Response(message=result, break_loop=False)
+            
+def search(agent:Agent, query:str, count:int=5, threshold:float=0.1):
+    initialize(agent)
+    docs = db.search_similarity_threshold(query,count,threshold) # type: ignore
+    if len(docs)==0: return files.read_file("./prompts/fw.memories_not_found.md", query=query)
+    else: return str(docs)
+
+def save(agent:Agent, text:str):
+    initialize(agent)
+    id = db.insert_document(text) # type: ignore
+    return files.read_file("./prompts/fw.memory_saved.md", memory_id=id)
+
+def delete(agent:Agent, ids_str:str):
+    initialize(agent)
+    ids = extract_guids(ids_str)
+    deleted = db.delete_documents_by_ids(ids) # type: ignore
+    return files.read_file("./prompts/fw.memories_deleted.md", memory_count=deleted)    
+
+def forget(agent:Agent, query:str):
+    initialize(agent)
+    deleted = db.delete_documents_by_query(query) # type: ignore
+    return files.read_file("./prompts/fw.memories_deleted.md", memory_count=deleted)
+
+def initialize(agent:Agent):
+    global db
+    if not db:
+        dir = os.path.join("memory",agent.config.memory_subdir)
+        db = VectorDB(embeddings_model=agent.config.embeddings_model, in_memory=False, cache_dir=dir)
+
+def extract_guids(text):
+    pattern = r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b'
+    return re.findall(pattern, text)
+
+# File: python/tools/online_knowledge_tool.py
+#==============================================================================
+
+from agent import Agent
+from python.helpers import perplexity_search
+from python.helpers.tool import Tool, Response
+
+class OnlineKnowledge(Tool):
+    def execute(self,**kwargs):
+        return Response(
+            message=process_question(self.args["question"]),
+            break_loop=False,
+        )
+
+def process_question(question):
+    return str(perplexity_search.perplexity_search(question))
+
+# File: python/tools/task_adjuster.py
+#==============================================================================
+
+from python.helpers.tool import Tool, Response
+import json
+
+class TaskAdjuster(Tool):
+    def execute(self, tasks, alignment_issues, **kwargs):
+        adjusted_tasks = self.adjust_tasks(tasks, alignment_issues)
+        return Response(message=json.dumps(adjusted_tasks), break_loop=False)
+
+    def adjust_tasks(self, tasks, alignment_issues):
+        adjustment_prompt = f"Adjust these tasks to resolve the following alignment issues: Tasks: {json.dumps(tasks)}. Alignment issues: {json.dumps(alignment_issues)}"
+        adjustment_result = self.agent.config.chat_model.generate(adjustment_prompt)
+        
+        # Parse the result to get adjusted tasks
+        # This is a simplified example; you'd need more sophisticated parsing
+        adjusted_tasks = json.loads(adjustment_result)
+        
+        return adjusted_tasks
+
+# File: python/tools/knowledge_tool.py
+#==============================================================================
+
+import os
+from agent import Agent
+from . import online_knowledge_tool
+from python.helpers import perplexity_search
+from python.helpers import duckduckgo_search
+
+from . import memory_tool
+import concurrent.futures
+
+
+
+from python.helpers.tool import Tool, Response
+from python.helpers import files
+
+class Knowledge(Tool):
+    def execute(self, question="", **kwargs):
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # Schedule the two functions to be run in parallel
+
+            # perplexity search, if API provided
+            if os.getenv("API_KEY_PERPLEXITY"):
+                perplexity = executor.submit(perplexity_search.perplexity_search, question)
+            else: perplexity = None
+
+            # duckduckgo search
+            duckduckgo = executor.submit(duckduckgo_search.search, question)
+
+            # memory search
+            future_memory = executor.submit(memory_tool.search, self.agent, question)
+
+            # Wait for both functions to complete
+            perplexity_result = (perplexity.result() if perplexity else "") or ""
+            duckduckgo_result = duckduckgo.result()
+            memory_result = future_memory.result()
+
+        msg = files.read_file("prompts/tool.knowledge.response.md", 
+                              online_sources = perplexity_result + "\n\n" + str(duckduckgo_result),
+                              memory = memory_result )
+
+        if self.agent.handle_intervention(msg): pass # wait for intervention and handle it, if paused
+
+        return Response(message=msg, break_loop=False)
+
+# File: python/tools/AlignmentChecker.py
+#==============================================================================
+
+class AlignmentChecker(Tool):
+    def execute(self, tasks, original_objective, **kwargs):
+        alignment_issues = self.check_alignment(tasks, original_objective)
+        if alignment_issues:
+            return Response(message=json.dumps(alignment_issues), break_loop=False)
+        return Response(message="All tasks aligned with objectives", break_loop=False)
+
+    def check_alignment(self, tasks, original_objective):
+        prompt = f"Check if these tasks align with the original objective. Original objective: {original_objective}. Tasks: {json.dumps(tasks)}"
+        result = self.agent.config.chat_model.generate(prompt)
+        # Parse the result to identify any alignment issues
+        # This is a simplified example; you'd need more sophisticated parsing
+        return [issue.strip() for issue in result.split("\n") if "misalignment" in issue.lower()]
+
+# File: python/tools/tool_creator.py
+#==============================================================================
+
+from helpers.tool import Tool, Response
+
+class ToolCreator(Tool):
+    def execute(self, **kwargs) -> Response:
+        description = self.args.get("description", "")
+        tool_code = self.generate_tool_code(description)
+        self.save_tool(tool_code)
+        return Response(message=f"Tool created: {description}", break_loop=False)
+
+    def generate_tool_code(self, description):
+        prompt = f"Generate Python code for a tool that does the following: {description}"
+        return self.agent.config.chat_model.generate(prompt)
+
+    def save_tool(self, code):
+        # Logic to save the generated tool code
+        pass
+
+# File: python/tools/response.py
+#==============================================================================
+
+from agent import Agent
+from helpers import files
+from helpers.print_style import PrintStyle
+
+from agent import Agent
+from helpers.tool import Tool, Response
+from helpers import files
+from helpers.print_style import PrintStyle
+
+class ResponseTool(Tool):
+
+    def execute(self,**kwargs):
+        self.agent.set_data("timeout", self.agent.config.response_timeout_seconds)
+        return Response(message=self.args["text"], break_loop=True)
+
+    def before_execution(self, **kwargs):
+        pass # do not add anything to the history or output
+    
+    def after_execution(self, response, **kwargs):
+        pass # do not add anything to the history or output
+
+# File: python/tools/call_subordinate.py
+#==============================================================================
+
+from agent import Agent
+from python.helpers.tool import Tool, Response
+from python.helpers import files
+from python.helpers.print_style import PrintStyle
+
+class Delegation(Tool):
+
+    def execute(self, message="", reset="", **kwargs):
+        # create subordinate agent using the data object on this agent and set superior agent to his data object
+        if self.agent.get_data("subordinate") is None or str(reset).lower().strip() == "true":
+            subordinate = Agent(self.agent.number+1, self.agent.config)
+            subordinate.set_data("superior", self.agent)
+            self.agent.set_data("subordinate", subordinate) 
+        # run subordinate agent message loop
+        return Response( message=self.agent.get_data("subordinate").message_loop(message), break_loop=False)
+
+# File: python/tools/objective_decomposer.py
+#==============================================================================
+
+import json
+from helpers.tool import Tool, Response
+class ObjectiveDecomposer(Tool):
+    def execute(self, **kwargs):
+        objectives = kwargs.get('objectives', '')
+        decomposed_tasks = self.decompose_objectives(objectives)
+        return Response(message=json.dumps(decomposed_tasks), break_loop=False)
+
+    def decompose_objectives(self, objectives):
+        decomposition_prompt = f"Decompose these objectives into subtasks: {objectives}"
+        decomposition_result = self.agent.config.chat_model.generate(decomposition_prompt)
+        
+        tasks = []
+        for task_description in decomposition_result.split("\n"):
+            if task_description.strip():
+                task_type = self.classify_task(task_description)
+                task = {"description": task_description.strip(), "type": task_type}
+                if task_type == "executable":
+                    task["code"] = self.generate_task_code(task_description)
+                tasks.append(task)
+        
+        return tasks
+
+    def classify_task(self, task):
+        if "create tool" in task.lower():
+            return "needs_tool"
+        elif any(keyword in task.lower() for keyword in ["analyze", "compute", "calculate"]):
+            return "executable"
+        else:
+            return "needs_decomposition"
+
+    def generate_task_code(self, task_description):
+        code_prompt = f"Generate Python code to accomplish this task: {task_description}"
+        return self.agent.config.chat_model.generate(code_prompt)
+
+# File: python/tools/code_execution_tool.py
+#==============================================================================
+
+from dataclasses import dataclass
+import os, json, contextlib, subprocess, ast, shlex
+from io import StringIO
+import time
+from typing import Literal
+from python.helpers import files, messages
+from agent import Agent
+from python.helpers.tool import Tool, Response
+from python.helpers import files
+from python.helpers.print_style import PrintStyle
+from python.helpers.shell_local import LocalInteractiveSession
+from python.helpers.shell_ssh import SSHInteractiveSession
+from python.helpers.docker import DockerContainerManager
+
+@dataclass
+class State:
+    shell: LocalInteractiveSession | SSHInteractiveSession
+    docker: DockerContainerManager | None
+        
+
+class CodeExecution(Tool):
+
+    def execute(self,**kwargs):
+
+        if self.agent.handle_intervention(): return Response(message="", break_loop=False)  # wait for intervention and handle it, if paused
+        
+        self.prepare_state()
+
+        # os.chdir(files.get_abs_path("./work_dir")) #change CWD to work_dir
+        
+        runtime = self.args["runtime"].lower().strip()
+        if runtime == "python":
+            response = self.execute_python_code(self.args["code"])
+        elif runtime == "nodejs":
+            response = self.execute_nodejs_code(self.args["code"])
+        elif runtime == "terminal":
+            response = self.execute_terminal_command(self.args["code"])
+        elif runtime == "output":
+            response = self.get_terminal_output()
+        else:
+            response = files.read_file("./prompts/fw.code_runtime_wrong.md", runtime=runtime)
+
+        if not response: response = files.read_file("./prompts/fw.code_no_output.md")
+        return Response(message=response, break_loop=False)
+
+    def after_execution(self, response, **kwargs):
+        msg_response = files.read_file("./prompts/fw.tool_response.md", tool_name=self.name, tool_response=response.message)
+        self.agent.append_message(msg_response, human=True)
+
+    def prepare_state(self):
+        self.state = self.agent.get_data("cot_state")
+        if not self.state:
+
+            #initialize docker container if execution in docker is configured
+            if self.agent.config.code_exec_docker_enabled:
+                docker = DockerContainerManager(name=self.agent.config.code_exec_docker_name, image=self.agent.config.code_exec_docker_image, ports=self.agent.config.code_exec_docker_ports, volumes=self.agent.config.code_exec_docker_volumes)
+                docker.start_container()
+            else: docker = None
+
+            #initialize local or remote interactive shell insterface
+            if self.agent.config.code_exec_ssh_enabled:
+                shell = SSHInteractiveSession(self.agent.config.code_exec_ssh_addr,self.agent.config.code_exec_ssh_port,self.agent.config.code_exec_ssh_user,self.agent.config.code_exec_ssh_pass)
+            else: shell = LocalInteractiveSession()
+                
+            self.state = State(shell=shell,docker=docker)
+            shell.connect()
+        self.agent.set_data("cot_state", self.state)
+    
+    def execute_python_code(self, code):
+        escaped_code = shlex.quote(code)
+        command = f'python3 -c {escaped_code}'
+        return self.terminal_session(command)
+
+    def execute_nodejs_code(self, code):
+        escaped_code = shlex.quote(code)
+        command = f'node -e {escaped_code}'
+        return self.terminal_session(command)
+
+    def execute_terminal_command(self, command):
+        return self.terminal_session(command)
+
+    def terminal_session(self, command):
+
+        if self.agent.handle_intervention(): return ""  # wait for intervention and handle it, if paused
+       
+        self.state.shell.send_command(command)
+
+        PrintStyle(background_color="white",font_color="#1B4F72",bold=True).print(f"{self.agent.agent_name} code execution output:")
+        return self.get_terminal_output()
+
+    def get_terminal_output(self):
+        idle=0
+        while True:       
+            time.sleep(0.1)  # Wait for some output to be generated
+            full_output, partial_output = self.state.shell.read_output()
+
+            if self.agent.handle_intervention(): return full_output  # wait for intervention and handle it, if paused
+        
+            if partial_output:
+                PrintStyle(font_color="#85C1E9").stream(partial_output)
+                idle=0    
+            else:
+                idle+=1
+                if ( full_output and idle > 30 ) or ( not full_output and idle > 100 ): return full_output
+                           
+
+# File: python/tools/unknown.py
+#==============================================================================
+
+from python.helpers.tool import Tool, Response
+from python.helpers import files
+
+class Unknown(Tool):
+    def execute(self, **kwargs):
+        return Response(
+                message=files.read_file("prompts/fw.tool_not_found.md",
+                                        tool_name=self.name,
+                                        tools_prompt=files.read_file("prompts/agent.tools.md")), 
+                break_loop=False)
+
+
+
+# File: python/tools/task_done.py
+#==============================================================================
+
+from agent import Agent
+from python.helpers import files
+from python.helpers.print_style import PrintStyle
+
+from agent import Agent
+from python.helpers.tool import Tool, Response
+from python.helpers import files
+from python.helpers.print_style import PrintStyle
+
+class TaskDone(Tool):
+
+    def execute(self,**kwargs):
+        self.agent.set_data("timeout", 0)
+        return Response(message=self.args["text"], break_loop=True)
+
+    def before_execution(self, **kwargs):
+        pass # do not add anything to the history or output
+    
+    def after_execution(self, response, **kwargs):
+        pass # do add anything to the history or output

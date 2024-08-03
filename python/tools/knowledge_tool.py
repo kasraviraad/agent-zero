@@ -1,16 +1,16 @@
 import os
 from agent import Agent
 from . import online_knowledge_tool
-from python.helpers import perplexity_search
-from python.helpers import duckduckgo_search
+from helpers import perplexity_search
+from helpers import duckduckgo_search
 
 from . import memory_tool
 import concurrent.futures
 
 
 
-from python.helpers.tool import Tool, Response
-from python.helpers import files
+from helpers.tool import Tool, Response
+from helpers import files
 
 class Knowledge(Tool):
     def execute(self, question="", **kwargs):

@@ -1,5 +1,10 @@
+from helpers.tool import Tool, Response
+import json
+
 class AlignmentChecker(Tool):
-    def execute(self, tasks, original_objective, **kwargs):
+    def execute(self, **kwargs):
+        tasks = kwargs.get('tasks', [])
+        original_objective = kwargs.get('original_objective', '')
         alignment_issues = self.check_alignment(tasks, original_objective)
         if alignment_issues:
             return Response(message=json.dumps(alignment_issues), break_loop=False)

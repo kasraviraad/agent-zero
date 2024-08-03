@@ -1,5 +1,5 @@
-from python.helpers.tool import Tool, Response
-from python.helpers import files
+from helpers.tool import Tool, Response
+from helpers import files
 
 class Unknown(Tool):
     def execute(self, **kwargs):

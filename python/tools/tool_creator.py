@@ -1,10 +1,11 @@
-from python.helpers.tool import Tool, Response
+from helpers.tool import Tool, Response
 
 class ToolCreator(Tool):
-    def execute(self, tool_description, **kwargs):
-        tool_code = self.generate_tool_code(tool_description)
+    def execute(self, **kwargs) -> Response:
+        description = self.args.get("description", "")
+        tool_code = self.generate_tool_code(description)
         self.save_tool(tool_code)
-        return Response(message=f"Tool created: {tool_description}", break_loop=False)
+        return Response(message=f"Tool created: {description}", break_loop=False)
 
     def generate_tool_code(self, description):
         prompt = f"Generate Python code for a tool that does the following: {description}"

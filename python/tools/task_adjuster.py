@@ -1,8 +1,10 @@
-from python.helpers.tool import Tool, Response
+from helpers.tool import Tool, Response
 import json
 
 class TaskAdjuster(Tool):
-    def execute(self, tasks, alignment_issues, **kwargs):
+    def execute(self, **kwargs):
+        tasks = self.args.get("tasks", [])
+        alignment_issues = self.args.get("alignment_issues", [])
         adjusted_tasks = self.adjust_tasks(tasks, alignment_issues)
         return Response(message=json.dumps(adjusted_tasks), break_loop=False)
 

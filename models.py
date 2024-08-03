@@ -21,7 +21,7 @@ def get_api_key(service):
 # Factory functions for each model type
 def get_anthropic_haiku(api_key=None, temperature=DEFAULT_TEMPERATURE):
     api_key = api_key or get_api_key("anthropic")
-    return ChatAnthropic(model_name="claude-3-haiku-20240307", temperature=temperature, api_key=api_key) # type: ignore
+    return ChatAnthropic(model_name="claude-3-5-sonnet-20240620", temperature=temperature, api_key=api_key) # type: ignore
 
 def get_anthropic_sonnet_35(api_key=None, temperature=DEFAULT_TEMPERATURE):
     api_key = api_key or get_api_key("anthropic")
@@ -30,18 +30,20 @@ def get_anthropic_sonnet_35(api_key=None, temperature=DEFAULT_TEMPERATURE):
 
 def get_anthropic_sonnet(api_key=None, temperature=DEFAULT_TEMPERATURE):
     api_key = api_key or get_api_key("anthropic")
-    return ChatAnthropic(model_name="claude-3-sonnet-20240229", temperature=temperature, api_key=api_key) # type: ignore
+    return ChatAnthropic(model_name="claude-3-5-sonnet-20240620", temperature=temperature, api_key=api_key) # type: ignore
 
 def get_anthropic_opus(api_key=None, temperature=DEFAULT_TEMPERATURE):
     api_key = api_key or get_api_key("anthropic")
-    return ChatAnthropic(model_name="claude-3-opus-20240229", temperature=temperature, api_key=api_key) # type: ignore
+    return ChatAnthropic(model_name="claude-3-5-sonnet-20240620", temperature=temperature, api_key=api_key) # type: ignore
 
 def get_openai_gpt35(api_key=None, temperature=DEFAULT_TEMPERATURE):
     api_key = api_key or get_api_key("openai")
     return ChatOpenAI(model_name="gpt-3.5-turbo", temperature=temperature, api_key=api_key) # type: ignore
 
-def get_openai_chat(api_key=None, model="gpt-4o-mini", temperature=DEFAULT_TEMPERATURE):
-    api_key = api_key or get_api_key("openai")
+def get_openai_chat(api_key=None, model="gpt-4-0125-preview", temperature=DEFAULT_TEMPERATURE):
+    api_key = api_key or get_api_key("openai") or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
     return ChatOpenAI(model_name=model, temperature=temperature, api_key=api_key) # type: ignore
 
 

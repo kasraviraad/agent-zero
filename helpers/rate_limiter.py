@@ -2,7 +2,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from typing import List, Tuple
-from .print_style import PrintStyle
+from helpers.print_style import PrintStyle
 
 @dataclass
 class CallRecord:

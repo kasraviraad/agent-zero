@@ -2,7 +2,7 @@ import time
 import docker
 import atexit
 from typing import Dict, Optional
-from python.helpers.files import get_abs_path
+from helpers.files import get_abs_path
 
 class DockerContainerManager:
     def __init__(self, image: str, name: str, ports: Optional[Dict[str, int]] = None, volumes: Optional[Dict[str, Dict[str, str]]] = None):

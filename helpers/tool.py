@@ -1,8 +1,7 @@
 from abc import abstractmethod
-from typing import TypedDict
-from agent import Agent
-from python.helpers.print_style import PrintStyle
-from python.helpers import files, messages
+from typing import TypedDict, Any
+from helpers.print_style import PrintStyle
+from helpers import files, messages
 
 class Response:
     def __init__(self, message: str, break_loop: bool) -> None:
@@ -10,8 +9,7 @@ class Response:
         self.break_loop = break_loop
     
 class Tool:
-
-    def __init__(self, agent: Agent, name: str, args: dict[str,str], message: str, **kwargs) -> None:
+    def __init__(self, agent: Any, name: str, args: dict[str,str], message: str, **kwargs) -> None:
         self.agent = agent
         self.name = name
         self.args = args
