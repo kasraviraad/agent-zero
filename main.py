@@ -17,6 +17,11 @@ from dotenv import load_dotenv
 import models
 import pysqlite3
 import sqlite3
+from agent import Agent
+from plugins.plugin_manager import PluginManager
+from src.self_evolving_agent import SelfEvolvingAgent
+from plugins.vector_database import VectorDatabase
+from modules.module_manager import ModuleManager
 print(f"SQLite version: {sqlite3.sqlite_version}")
 sys.modules['sqlite3'] = pysqlite3
 load_dotenv()
@@ -147,7 +152,11 @@ async def main():
     if main_agent is None:
         print("Failed to initialize the agent. Exiting.")
         return
-    
+    ector_db = VectorDatabase()  # Initialize your vector database
+    module_manager = ModuleManager(vector_db)
+    plugin_manager = PluginManager(vector_db)
+    agent = Agent(module_manager, plugin_manager)
+    evolving_agent = SelfEvolvingAgent(agent, plugin_manager)
     await main_agent.start()
     
     # Decompose and execute objectives

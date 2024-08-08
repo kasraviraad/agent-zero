@@ -11,6 +11,7 @@ from langchain_core.embeddings import Embeddings
 from modules.knowledge_base import KnowledgeBase
 from modules.objective_handler import ObjectiveHandler
 from python.tools.task_adjuster import TaskAdjuster
+from plugins.plugin_manager import PluginManager
 
 @dataclass
 class AgentConfig: 
@@ -60,7 +61,7 @@ class Agent:
 
         self.system_prompt = files.read_file("prompts/agent.system.md").replace("{", "{{").replace("}", "}}")
         self.tools_prompt = files.read_file("prompts/agent.tools.md").replace("{", "{{").replace("}", "}}")
-
+        self.plugin_manager = plugin_manager
         self.history: List[AIMessage | HumanMessage] = []
         self.last_message = ""
         self.intervention_message = ""
@@ -69,8 +70,13 @@ class Agent:
         self.data = {} # free data object all the tools can use
 
         os.chdir(files.get_abs_path("./work_dir")) #change CWD to work_dir
-        
+        # Existing initialization code
+        self.plugin_manager = PluginManager()
+    def use_plugin(self, plugin_name: str, function_name: str, **kwargs):
+        return self.plugin_manager.execute_plugin(plugin_name, function_name, **kwargs)
 
+    def request_plugin(self, specification: dict):
+        return self.plugin_manager.request_plugin(specification)
     def message_loop(self, msg: str):
         try:
             printer = PrintStyle(italic=True, font_color="#b3ffd9", padding=False)    
